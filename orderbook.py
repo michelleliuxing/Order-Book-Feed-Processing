@@ -27,47 +27,26 @@ class OrderBook:
         # Use pop to delete order with non-existent order handling
         self._side(side).pop(order_id, None)
 
-    # Reduce an order's volumn by traded amount - 'E'
-    def trade(self, order_id: int, side: str, traded_volume: int) -> None:
+    def trade(self, order_id: int, side: str, traded_volume: int) -> int | None:
+        """Reduce an order's volume by traded amount ('E').
+        Returns the trade price so callers (e.g. PnL tracker) can use it,
+        or None if the order was not found."""
         orders = self._side(side)
         if order_id not in orders:
-            return
+            return None
         price, current_volume = orders[order_id]
         remaining = current_volume - traded_volume
         if remaining <= 0:
-            # Fully traded — remove from book
             del orders[order_id]
         else:
-            # Partially traded — update with reduced volume, same price
             orders[order_id] = (price, remaining)
+        return price
 
     def depth(self, levels: int) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
         # Return top-N (bids, asks) aggregated by price
         bids = _aggregate(self._bids, True, levels)  # Bids: descending price
         asks = _aggregate(self._asks, False, levels)  # Asks: ascending price
         return bids, asks
-
-
-# Aggregate individual orders into price-level depth entries.
-def _aggregate(
-    orders: dict[int, tuple[int, int]], reverse: bool, limit: int
-) -> list[tuple[int, int]]:
-    # Step 1: aggregate volumes by price
-    totals: dict[int, int] = {}
-    for price, volume in orders.values():
-        totals[price] = totals.get(price, 0) + volume
-
-    # Step 2: filter out price levels with zero volume
-    filtered = []
-    for price, volume in totals.items():
-        if volume != 0:
-            filtered.append((price, volume))
-
-    # Step 3: sort by price
-    sorted_levels = sorted(filtered, reverse=reverse)
-
-    # Step 4: take only the top N levels
-    return sorted_levels[:limit]
 
 
 # Aggregate individual orders into price-level depth entries.
